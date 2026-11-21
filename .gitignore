@@ -1,0 +1,17 @@
+build
+mx.scratch
+!.settings
+
+# Generated files
+cmake/
+Core/*/*
+Drivers/
+Middlewares/
+.mxproject
+startup_stm32g474xx.s
+stm32_led_control.ioc
+STM32G474xx_FLASH.ld
+
+
+# Keep the main.c as I will modify it
+!Core/Src/main.c
