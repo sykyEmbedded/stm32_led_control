@@ -19,9 +19,13 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
+#include "cmsis_os2.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+
+#include "stdbool.h"
+#include "stm32g4xx_hal_gpio.h"
 
 /* USER CODE END Includes */
 
@@ -73,6 +77,11 @@ const osMutexAttr_t mutexLEDState_attributes = {
 };
 /* USER CODE BEGIN PV */
 
+struct LED_State{
+  uint32_t period_ms;
+  bool on;
+}LED_State;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -121,6 +130,9 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   /* USER CODE BEGIN 2 */
+
+  LED_State.period_ms = 1000;
+  LED_State.on = true;
 
   /* USER CODE END 2 */
 
@@ -287,18 +299,26 @@ static void MX_GPIO_Init(void)
 void StartLED(void *argument)
 {
   /* USER CODE BEGIN 5 */
+  
+  uint32_t period;
+  bool led_is_on;
+  
   /* Infinite loop */
   for(;;)
   {
-    if(HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_SET){
-      HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5,GPIO_PIN_SET);
+    osMutexAcquire(mutexLEDStateHandle, osWaitForever);
+    period = LED_State.period_ms;
+    led_is_on = LED_State.on;
+    osMutexRelease(mutexLEDStateHandle);
+
+    if(led_is_on){
+      HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
     }
-    else{
-      HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5,GPIO_PIN_RESET);
+    else {
+      HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
     }
 
-    
-    osDelay(50);
+    osDelay(period);
   }
   /* USER CODE END 5 */
 }
