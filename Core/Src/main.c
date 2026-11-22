@@ -19,12 +19,14 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
-#include "cmsis_os2.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include "cmsis_os2.h"
 #include "stdbool.h"
+#include "stm32g474xx.h"
+#include "stm32g4xx_hal.h"
 #include "stm32g4xx_hal_gpio.h"
 
 /* USER CODE END Includes */
@@ -60,13 +62,6 @@ const osThreadAttr_t UartTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
   .stack_size = 128 * 4
 };
-/* Definitions for buttonTask */
-osThreadId_t buttonTaskHandle;
-const osThreadAttr_t buttonTask_attributes = {
-  .name = "buttonTask",
-  .priority = (osPriority_t) osPriorityNormal,
-  .stack_size = 128 * 4
-};
 /* Definitions for mutexLEDState */
 osMutexId_t mutexLEDStateHandle;
 osStaticMutexDef_t mutexLEDStateControlBlock;
@@ -77,10 +72,15 @@ const osMutexAttr_t mutexLEDState_attributes = {
 };
 /* USER CODE BEGIN PV */
 
+// Possible optimization: add a last turn on time, so osDelay
+// is not for the period. So that the turn off from the button is responsive
 struct LED_State{
   uint32_t period_ms;
-  bool on;
+  volatile bool on;
 }LED_State;
+
+// For handling button debouncing
+volatile uint32_t last_button_press_time = 0;
 
 /* USER CODE END PV */
 
@@ -89,7 +89,6 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 void StartLED(void *argument);
 void StartListenUART(void *argument);
-void StartButton(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -164,9 +163,6 @@ int main(void)
 
   /* creation of UartTask */
   UartTaskHandle = osThreadNew(StartListenUART, NULL, &UartTask_attributes);
-
-  /* creation of buttonTask */
-  buttonTaskHandle = osThreadNew(StartButton, NULL, &buttonTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -259,11 +255,11 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : PB1_Pin */
-  GPIO_InitStruct.Pin = PB1_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
-  HAL_GPIO_Init(PB1_GPIO_Port, &GPIO_InitStruct);
+  /*Configure GPIO pin : PC13 */
+  GPIO_InitStruct.Pin = GPIO_PIN_13;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pins : LPUART1_TX_Pin LPUART1_RX_Pin */
   GPIO_InitStruct.Pin = LPUART1_TX_Pin|LPUART1_RX_Pin;
@@ -280,13 +276,37 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
+
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
   /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  // Reference: https://wiki.st.com/stm32mcu/wiki/Getting_started_with_EXTI
 
+  if(GPIO_Pin == GPIO_PIN_13) {
+    uint32_t time_now = HAL_GetTick();
+
+    // Debounce, consecutive presses within n ms should be ignored
+    if(time_now - last_button_press_time > 30){
+
+      osMutexAcquire(mutexLEDStateHandle, osWaitForever);
+      LED_State.on ^= 0x01;
+      osMutexRelease(mutexLEDStateHandle);
+
+
+      last_button_press_time = time_now;
+    }
+  } else {
+      __NOP();
+  }
+}
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartLED */
@@ -299,16 +319,19 @@ static void MX_GPIO_Init(void)
 void StartLED(void *argument)
 {
   /* USER CODE BEGIN 5 */
-  
+
   uint32_t period;
   bool led_is_on;
-  
+    
   /* Infinite loop */
   for(;;)
   {
+
     osMutexAcquire(mutexLEDStateHandle, osWaitForever);
-    period = LED_State.period_ms;
-    led_is_on = LED_State.on;
+
+    period = LED_State.period_ms; // Copy the value inside so it doesnt change halfway
+    led_is_on = (bool) (LED_State.on & 0x01); // Check if the last bit is set or not
+
     osMutexRelease(mutexLEDStateHandle);
 
     if(led_is_on){
@@ -339,24 +362,6 @@ void StartListenUART(void *argument)
     osDelay(1);
   }
   /* USER CODE END StartListenUART */
-}
-
-/* USER CODE BEGIN Header_StartButton */
-/**
-* @brief Function implementing the buttonTask thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_StartButton */
-void StartButton(void *argument)
-{
-  /* USER CODE BEGIN StartButton */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END StartButton */
 }
 
 /**
