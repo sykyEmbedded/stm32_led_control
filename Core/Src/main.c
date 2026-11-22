@@ -26,6 +26,7 @@
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
+typedef StaticSemaphore_t osStaticMutexDef_t;
 /* USER CODE BEGIN PTD */
 
 /* USER CODE END PTD */
@@ -41,12 +42,34 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-/* Definitions for defaultTask */
-osThreadId_t defaultTaskHandle;
-const osThreadAttr_t defaultTask_attributes = {
-  .name = "defaultTask",
+/* Definitions for LedTask */
+osThreadId_t LedTaskHandle;
+const osThreadAttr_t LedTask_attributes = {
+  .name = "LedTask",
+  .priority = (osPriority_t) osPriorityLow,
+  .stack_size = 128 * 4
+};
+/* Definitions for UartTask */
+osThreadId_t UartTaskHandle;
+const osThreadAttr_t UartTask_attributes = {
+  .name = "UartTask",
   .priority = (osPriority_t) osPriorityNormal,
   .stack_size = 128 * 4
+};
+/* Definitions for buttonTask */
+osThreadId_t buttonTaskHandle;
+const osThreadAttr_t buttonTask_attributes = {
+  .name = "buttonTask",
+  .priority = (osPriority_t) osPriorityNormal,
+  .stack_size = 128 * 4
+};
+/* Definitions for mutexLEDState */
+osMutexId_t mutexLEDStateHandle;
+osStaticMutexDef_t mutexLEDStateControlBlock;
+const osMutexAttr_t mutexLEDState_attributes = {
+  .name = "mutexLEDState",
+  .cb_mem = &mutexLEDStateControlBlock,
+  .cb_size = sizeof(mutexLEDStateControlBlock),
 };
 /* USER CODE BEGIN PV */
 
@@ -55,7 +78,9 @@ const osThreadAttr_t defaultTask_attributes = {
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-void StartDefaultTask(void *argument);
+void StartLED(void *argument);
+void StartListenUART(void *argument);
+void StartButton(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -101,6 +126,9 @@ int main(void)
 
   /* Init scheduler */
   osKernelInitialize();
+  /* Create the mutex(es) */
+  /* creation of mutexLEDState */
+  mutexLEDStateHandle = osMutexNew(&mutexLEDState_attributes);
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
@@ -119,8 +147,14 @@ int main(void)
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* creation of defaultTask */
-  defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+  /* creation of LedTask */
+  LedTaskHandle = osThreadNew(StartLED, NULL, &LedTask_attributes);
+
+  /* creation of UartTask */
+  UartTaskHandle = osThreadNew(StartListenUART, NULL, &UartTask_attributes);
+
+  /* creation of buttonTask */
+  buttonTaskHandle = osThreadNew(StartButton, NULL, &buttonTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -243,14 +277,14 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_StartDefaultTask */
+/* USER CODE BEGIN Header_StartLED */
 /**
-  * @brief  Function implementing the defaultTask thread.
+  * @brief  Function implementing the LedTask thread.
   * @param  argument: Not used
   * @retval None
   */
-/* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void *argument)
+/* USER CODE END Header_StartLED */
+void StartLED(void *argument)
 {
   /* USER CODE BEGIN 5 */
   /* Infinite loop */
@@ -267,6 +301,42 @@ void StartDefaultTask(void *argument)
     osDelay(50);
   }
   /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_StartListenUART */
+/**
+* @brief Function implementing the UartTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartListenUART */
+void StartListenUART(void *argument)
+{
+  /* USER CODE BEGIN StartListenUART */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END StartListenUART */
+}
+
+/* USER CODE BEGIN Header_StartButton */
+/**
+* @brief Function implementing the buttonTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartButton */
+void StartButton(void *argument)
+{
+  /* USER CODE BEGIN StartButton */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END StartButton */
 }
 
 /**
